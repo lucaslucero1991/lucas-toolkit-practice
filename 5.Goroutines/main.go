@@ -7,21 +7,13 @@ import (
 	"time"
 )
 
-/*
-	- Permite escribir software concurrente, ejecutar tareas al mismo tiempo
-	- Version ligera de un hilo,
-	- Con go, pero tiene algunos problemas a resolver:
-	- el programa termina y los procesos todavia no
-	- Usamos WaitGroup waits for a collection of goroutines to finish.
-	- Usamos goroutinas para hacer multiples tareas que llevan tiempo, y luego
-	 buscamos una manera syncronica de agrupar esos resultados, luego usaremos canales
-*/
-
+// Truck define la interfaz para camiones.
 type Truck interface {
 	LoadCargo() error
 	UnloadCargo() error
 }
 
+// NormalTruck es un camión simple con ID y carga.
 type NormalTruck struct {
 	id    string
 	cargo int
@@ -37,6 +29,7 @@ func (t *NormalTruck) UnloadCargo() error {
 	return nil
 }
 
+// ComplexTruck es un camión con batería adicional.
 type ComplexTruck struct {
 	id      string
 	cargo   int
@@ -46,7 +39,6 @@ type ComplexTruck struct {
 func (t *ComplexTruck) LoadCargo() error {
 	t.cargo += 1
 	t.battery += 1
-
 	return nil
 }
 
@@ -56,21 +48,44 @@ func (t *ComplexTruck) UnloadCargo() error {
 	return nil
 }
 
-func asyncProcessTrucks(trucks []Truck) error {
-	var wg sync.WaitGroup
+// processLoad simula la carga y descarga de un camión, con un retardo.
+func processLoad(truck Truck) error {
+	log.Printf("Iniciando carga para camión %+v", truck)
+	// Simular una tarea que toma tiempo (1 segundo).
+	time.Sleep(1 * time.Second)
 
-	for _, t := range trucks {
-		wg.Add(1)
-		go func(t Truck) {
-			processLoad(t)
-			wg.Done()
-		}(t)
+	if err := truck.LoadCargo(); err != nil {
+		return fmt.Errorf("error cargando camión: %w", err)
+	}
+	if err := truck.UnloadCargo(); err != nil {
+		return fmt.Errorf("error descargando camión: %w", err)
 	}
 
-	wg.Wait()
+	log.Printf("Carga finalizada para camión %+v", truck)
 	return nil
 }
 
+// asyncProcessTrucks procesa camiones concurrentemente usando goroutines y WaitGroup.
+func asyncProcessTrucks(trucks []Truck) error {
+	var wg sync.WaitGroup
+
+	for _, truck := range trucks {
+		wg.Add(1) // Incrementar el contador para cada goroutine.
+		go func(t Truck) {
+			defer wg.Done() // Decrementar el contador al finalizar.
+			if err := processLoad(t); err != nil {
+				log.Printf("Error procesando camión %+v: %v", t, err)
+			}
+		}(truck)
+	}
+
+	wg.Wait() // Esperar a que todas las goroutines terminen.
+	return nil
+}
+
+// syncProcessTruck lanza goroutines sin sincronización (experimental).
+// Nota: Esta función está diseñada para probar el error de no usar WaitGroup,
+// lo que puede causar que el programa termine antes de que las goroutines finalicen.
 func syncProcessTruck(trucks []Truck) error {
 	for _, t := range trucks {
 		go processLoad(t)
@@ -78,23 +93,8 @@ func syncProcessTruck(trucks []Truck) error {
 	return nil
 }
 
-func processLoad(truck Truck) {
-	log.Printf("Init load cargo from %+v", truck)
-	time.Sleep(1 * time.Second)
-	err := truck.LoadCargo()
-	if err != nil {
-		log.Println(err)
-	}
-
-	err = truck.UnloadCargo()
-	if err != nil {
-		log.Println(err)
-	}
-	log.Printf("Finish load cargo from %+v", truck)
-
-}
-
 func main() {
+	// Lista de camiones a procesar.
 	trucks := []Truck{
 		&NormalTruck{id: "truck-1", cargo: 0},
 		&ComplexTruck{id: "truck-2", cargo: 0, battery: 100},
@@ -102,10 +102,15 @@ func main() {
 		&ComplexTruck{id: "truck-4", cargo: 0, battery: 80},
 	}
 
+	// Procesar camiones concurrentemente con sincronización.
 	if err := asyncProcessTrucks(trucks); err != nil {
-		log.Println(err)
+		log.Fatalf("Error procesando camiones: %v", err)
 	}
 
-	time.Sleep(2 * time.Second)
-	fmt.Println("All trucks are process successfully!")
+	// Opcional: Descomenta para probar syncProcessTruck y observar el problema de no sincronizar.
+	// if err := syncProcessTruck(trucks); err != nil {
+	// 	log.Fatalf("Error procesando camiones: %v", err)
+	// }
+
+	fmt.Println("¡Todos los camiones fueron procesados exitosamente!")
 }
