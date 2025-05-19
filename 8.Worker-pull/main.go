@@ -5,7 +5,8 @@ import (
 	"time"
 )
 
-// worker es una goroutine que procesa tareas (jobs) desde un canal y envía resultados a otro.
+// worker es una goroutine que procesa tareas (jobs) desde un canal de solo lectura
+// y envía resultados a otro canal (results) de solo escritura.
 // Cada worker tiene un ID para identificar sus logs.
 func worker(id int, jobs <-chan int, results chan<- int) {
 	// Iterar sobre el canal jobs usando for range, que termina cuando jobs se cierra.
@@ -22,7 +23,7 @@ func worker(id int, jobs <-chan int, results chan<- int) {
 func main() {
 	// Definir constantes para el número de tareas y workers.
 	const numJobs = 5    // Total de tareas a procesar.
-	const numWorkers = 4 // Número de goroutines (workers) en el pool.
+	const numWorkers = 2 // Número de goroutines (workers) en el pool.
 
 	// Crear canales con buffer para evitar deadlocks.
 	// Buffer igual a numJobs asegura que todas las tareas puedan enviarse sin bloquear.
@@ -48,8 +49,7 @@ func main() {
 	// Iterar numJobs veces asegura que todas las tareas se completen.
 	// Nota: No usamos WaitGroup porque esperamos todos los resultados aquí.
 	for a := 1; a <= numJobs; a++ {
-		result := <-results
-		fmt.Println("Resultado recibido:", result)
+		<-results
 	}
 
 	// Opcional: No cerramos results porque no se lee después, pero podría cerrarse si se reutiliza.
