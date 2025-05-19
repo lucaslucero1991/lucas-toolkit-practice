@@ -2,19 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
-	"time"
 )
 
-// ContextKeyValue es un tipo seguro para evitar errores en las claves de contexto.
-type ContextKeyValue string
-
-// UserIDKey es la clave para almacenar el ID del usuario en el contexto.
-const UserIDKey ContextKeyValue = "userID"
-
-// Truck define la interfaz para camiones que cargan y descargan carga.
+// Truck define la interfaz para camiones.
 type Truck interface {
 	LoadCargo() error
 	UnloadCargo() error
@@ -55,69 +49,54 @@ func (t *ComplexTruck) UnloadCargo() error {
 	return nil
 }
 
-// processLoad ejecuta la carga y descarga de un camión, respetando el contexto.
+// processLoad simula la carga y descarga de un camión.
 func processLoad(ctx context.Context, truck Truck) error {
 	log.Printf("Iniciando carga para camión %+v", truck)
-
-	// Ejemplo de acceso a metadatos en el contexto.
-	if userID, ok := ctx.Value(UserIDKey).(int); ok {
-		log.Printf("Usuario procesando: %d", userID)
-	}
-
-	// Crear un contexto derivado con timeout de 4 segundos.
-	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
-	defer cancel() // Liberar recursos al finalizar.
-
-	// Simular una tarea que toma tiempo (3 segundos).
-	select {
-	case <-time.After(3 * time.Second):
-		// Tarea completada dentro del tiempo permitido.
-	case <-ctx.Done():
-		// Contexto cancelado (por timeout o cancelación manual).
-		return fmt.Errorf("procesamiento cancelado: %w", ctx.Err())
-	}
-
-	// Ejecutar operaciones del camión.
-	if err := truck.LoadCargo(); err != nil {
-		return fmt.Errorf("error cargando camión: %w", err)
-	}
-	if err := truck.UnloadCargo(); err != nil {
-		return fmt.Errorf("error descargando camión: %w", err)
-	}
-
-	log.Printf("Carga finalizada para camión %+v", truck)
-	return nil
+	return errors.New("error manual simulando fallo para todos")
 }
 
-// asyncProcessTrucks procesa una lista de camiones de forma concurrente.
+// asyncProcessTrucks procesa camiones concurrentemente, recolectando errores en un canal.
 func asyncProcessTrucks(ctx context.Context, trucks []Truck) error {
 	var wg sync.WaitGroup
+	// Canal con buffer para evitar deadlocks, tamaño igual al número de camiones.
+	errorsChan := make(chan error, len(trucks))
 
 	for _, truck := range trucks {
-		wg.Add(1)
+		wg.Add(1) // Incrementar contador para cada goroutine.
 		go func(t Truck) {
-			defer wg.Done()
+			defer wg.Done() // Decrementar contador al finalizar.
 			if err := processLoad(ctx, t); err != nil {
 				log.Printf("Error procesando camión %+v: %v", t, err)
+				errorsChan <- err // Enviar error al canal.
 			}
 		}(truck)
 	}
 
-	wg.Wait()
+	wg.Wait()         // Esperar a que todas las goroutines terminen.
+	close(errorsChan) // Cerrar el canal para permitir iteración con for range.
+
+	// Iterar errores usando for range (buena práctica).
+	var errors []error
+	for err := range errorsChan {
+		log.Printf("Error procesado: %v", err)
+		errors = append(errors, err)
+	}
+
+	if len(errors) > 0 {
+		log.Printf("Cantidad de errores: %d", len(errors))
+		return fmt.Errorf("se encontraron %d errores durante el procesamiento", len(errors))
+	}
+
 	return nil
 }
 
 func main() {
-	// Crear un contexto base.
 	ctx := context.Background()
-
-	// Añadir metadatos al contexto (ID de usuario).
-	ctx = context.WithValue(ctx, UserIDKey, 24)
 
 	// Lista de camiones a procesar.
 	trucks := []Truck{
 		&NormalTruck{id: "truck-1", cargo: 0},
-		&ComplexTruck{id: "truck-2", cargo: 0, battery: 100},
+		&ComplexTruck{id: "truck-2", cargo: 0, battery: 100}, // Generará un error.
 		&NormalTruck{id: "truck-3", cargo: 0},
 		&ComplexTruck{id: "truck-4", cargo: 0, battery: 80},
 	}
