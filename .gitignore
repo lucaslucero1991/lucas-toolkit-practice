@@ -1,0 +1,26 @@
+# Binarios compilados
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Archivos de salida de pruebas
+*.test
+*.prof
+
+# Directorios de dependencias (si usas vendor/)
+vendor/
+
+# Archivos temporales y caché
+*.out
+*.log
+*.cache
+
+# Editor y sistema operativo
+.DS_Store
+.vscode/
+.idea/
+
+# Cobertura de tests
+cover.out
