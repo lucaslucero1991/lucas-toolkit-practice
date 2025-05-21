@@ -1,6 +1,9 @@
 package main
 
-import "errors"
+import (
+	"errors"
+	"sync"
+)
 
 var (
 	ErrTruckNotFound = errors.New("truck not found")
@@ -8,7 +11,7 @@ var (
 
 type FleetManager interface {
 	AddTruck(id string, cargo int) error
-	GetTruck(id string) (*Truck, error)
+	GetTruck(id string) (Truck, error)
 	RemoveTruck(id string) error
 	UpdateTruckCargo(id string, cargo int) error
 }
@@ -20,36 +23,41 @@ type Truck struct {
 
 type TruckManager struct {
 	trucks map[string]*Truck
+	sync.RWMutex
 }
 
 func (t *TruckManager) AddTruck(id string, cargo int) error {
+	t.Lock()
+	defer t.Unlock()
+
 	t.trucks[id] = &Truck{ID: id, Cargo: cargo}
 	return nil
 }
 
-func (t *TruckManager) GetTruck(id string) (*Truck, error) {
+func (t *TruckManager) GetTruck(id string) (Truck, error) {
+	t.RLock()
+	defer t.RUnlock()
+
 	if truck, ok := t.trucks[id]; !ok {
-		return nil, ErrTruckNotFound
+		return Truck{}, ErrTruckNotFound
 	} else {
-		return truck, nil
+		return *truck, nil
 	}
 }
 
 func (t *TruckManager) RemoveTruck(id string) error {
-	if _, err := t.GetTruck(id); err != nil {
-		return ErrTruckNotFound
-	}
+	t.Lock()
+	defer t.Unlock()
+
 	delete(t.trucks, id)
 	return nil
 }
 
 func (t *TruckManager) UpdateTruckCargo(id string, cargo int) error {
-	if truck, err := t.GetTruck(id); err != nil {
-		return ErrTruckNotFound
-	} else {
-		truck.Cargo = cargo
-		t.trucks[id] = truck
-	}
+	t.Lock()
+	defer t.Unlock()
+
+	t.trucks[id].Cargo = cargo
 	return nil
 }
 

@@ -8,7 +8,7 @@ func TestAddTruck(t *testing.T) {
 	manager := NewTruckManager()
 	err := manager.AddTruck("1", 100)
 	if err != nil {
-		t.Errorf("AddTruck failed: %s", err)
+		t.Errorf("AddTruck failed: %v", err)
 	}
 
 	if len(manager.trucks) != 1 {
@@ -20,7 +20,7 @@ func TestGetTruck(t *testing.T) {
 	manager := NewTruckManager()
 	err := manager.AddTruck("1", 100)
 	if err != nil {
-		t.Errorf("Expected no error, got %s", err)
+		t.Errorf("Expected no error, got %v", err)
 	}
 
 	truck, err := manager.GetTruck("1")
@@ -69,7 +69,7 @@ func TestUpdateTruckCargo(t *testing.T) {
 
 	truck, err := manager.GetTruck("1")
 	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
+		t.Errorf("Expected no error, got %s", err)
 	}
 
 	if truck.Cargo != 200 {
@@ -79,7 +79,10 @@ func TestUpdateTruckCargo(t *testing.T) {
 
 func TestConcurrentUpdate(t *testing.T) {
 	manager := NewTruckManager()
-	manager.AddTruck("1", 100)
+	err := manager.AddTruck("1", 100)
+	if err != nil {
+		t.Errorf("Expected no error, got %s", err)
+	}
 
 	const numGoroutines = 100
 	const iterations = 100
@@ -89,7 +92,10 @@ func TestConcurrentUpdate(t *testing.T) {
 		go func() {
 			for j := 0; j < iterations; j++ {
 				truck, _ := manager.GetTruck("1")
-				manager.UpdateTruckCargo("1", truck.Cargo+1)
+				err = manager.UpdateTruckCargo("1", truck.Cargo+1)
+				if err != nil {
+					t.Errorf("Expected no error, got %s", err)
+				}
 			}
 			done <- true
 		}()
