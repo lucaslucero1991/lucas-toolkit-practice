@@ -169,9 +169,9 @@ func TestMemoryBuffer_ConcurrentPushWithinCapacity(t *testing.T) {
 	wg.Add(workers)
 
 	for i := 0; i < workers; i++ {
-		go func(n int) {
+		go func(i int) {
 			defer wg.Done()
-			_ = buff.Push(Message{Body: fmt.Sprintf("msg-%d", n)})
+			_ = buff.Push(Message{Body: fmt.Sprintf("msg-%d", i)})
 		}(i)
 	}
 
