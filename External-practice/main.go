@@ -79,21 +79,6 @@ func (a *api) routes() http.Handler {
 	return mux
 }
 
-func readBody(w http.ResponseWriter, r *http.Request) (string, error) {
-	r.Body = http.MaxBytesReader(w, r.Body, MaxBodyBytes)
-
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		return "", err
-	}
-
-	if len(body) == 0 {
-		return "", ErrEmptyBody
-	}
-
-	return string(body), nil
-}
-
 func (a *api) handlePost(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
@@ -116,6 +101,21 @@ func (a *api) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
+}
+
+func readBody(w http.ResponseWriter, r *http.Request) (string, error) {
+	r.Body = http.MaxBytesReader(w, r.Body, MaxBodyBytes)
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return "", err
+	}
+
+	if len(body) == 0 {
+		return "", ErrEmptyBody
+	}
+
+	return string(body), nil
 }
 
 func (a *api) handleGet(w http.ResponseWriter, r *http.Request) {
