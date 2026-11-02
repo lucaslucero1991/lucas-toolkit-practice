@@ -13,6 +13,10 @@ build/
 out/
 go-diagrams/
 
+# Compiled Go binary (module name)
+lucas-toolkit-practice
+**/lucas-toolkit-practice
+
 # Test binary, built with `go test -c`
 *.test
 *.prof
