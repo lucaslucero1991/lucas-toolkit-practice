@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -161,7 +162,7 @@ func TestHandleGet_InternalError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
 
-func TestMemoryBuffer_ConcurrentPushWithinCapacity(t *testing.T) {
+func TestMemoryBuffer_ConcurrentPushNoLoss(t *testing.T) {
 	const workers = 50
 	buff := NewMemoryBuffer(workers)
 
@@ -192,30 +193,27 @@ func TestMemoryBuffer_ConcurrentPushWithinCapacity(t *testing.T) {
 	}
 }
 
-func TestMemoryBuffer_ConcurrentPushRespectsLimit(t *testing.T) {
+func TestMemoryBuffer_ConcurrentPushRespectsCapacity(t *testing.T) {
 	const capacity = 10
 	const workers = 100
 	buff := NewMemoryBuffer(capacity)
 
 	var wg sync.WaitGroup
-	var accepted int64
-	var mu sync.Mutex
+	var accepted atomic.Int64
 	wg.Add(workers)
 
 	for i := 0; i < workers; i++ {
-		go func(n int) {
+		go func(i int) {
 			defer wg.Done()
-			if err := buff.Push(Message{Body: fmt.Sprintf("msg-%d", n)}); err == nil {
-				mu.Lock()
-				accepted++
-				mu.Unlock()
+			if err := buff.Push(Message{Body: fmt.Sprintf("msg-%d", i)}); err == nil {
+				accepted.Add(1)
 			}
 		}(i)
 	}
 
 	wg.Wait()
 
-	assert.Equal(t, int64(capacity), accepted)
+	assert.Equal(t, int64(capacity), accepted.Load())
 }
 
 func TestMemoryBuffer_ConcurrentPushPop(t *testing.T) {
@@ -223,42 +221,31 @@ func TestMemoryBuffer_ConcurrentPushPop(t *testing.T) {
 	const producers = 50
 	buff := NewMemoryBuffer(capacity)
 
-	var producerWg sync.WaitGroup
-	producerWg.Add(producers)
-
-	var consumerWg sync.WaitGroup
-	consumerWg.Add(producers)
-
-	var consumed int64
-	var mu sync.Mutex
+	var wg sync.WaitGroup
+	var consumed atomic.Int64
+	wg.Add(producers * 2)
 
 	for i := 0; i < producers; i++ {
-		go func(n int) {
-			defer producerWg.Done()
-			for {
-				if err := buff.Push(Message{Body: fmt.Sprintf("msg-%d", n)}); err == nil {
-					return
-				}
+		go func(i int) {
+			defer wg.Done()
+			for buff.Push(Message{Body: fmt.Sprintf("msg-%d", i)}) != nil {
 			}
 		}(i)
 
 		go func() {
-			defer consumerWg.Done()
+			defer wg.Done()
 			for {
 				if _, err := buff.Pop(); err == nil {
-					mu.Lock()
-					consumed++
-					mu.Unlock()
+					consumed.Add(1)
 					return
 				}
 			}
 		}()
 	}
 
-	producerWg.Wait()
-	consumerWg.Wait()
+	wg.Wait()
 
-	assert.Equal(t, int64(producers), consumed)
+	assert.Equal(t, int64(producers), consumed.Load())
 
 	_, err := buff.Pop()
 	assert.ErrorIs(t, err, ErrEmpty)
