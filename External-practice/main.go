@@ -21,8 +21,9 @@ type Message struct {
 }
 
 var (
-	ErrEmpty = errors.New("empty")
-	ErrFull  = errors.New("full")
+	ErrEmpty     = errors.New("empty")
+	ErrFull      = errors.New("full")
+	ErrEmptyBody = errors.New("empty body")
 )
 
 //go:generate moq -out moq_test.go . MessageBuffer
@@ -71,23 +72,38 @@ type api struct {
 	buff MessageBuffer
 }
 
-func (a *api) handlePost(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
+func (a *api) routes() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /message", a.handlePost)
+	mux.HandleFunc("GET /message", a.handleGet)
+	return mux
+}
 
+func readBody(w http.ResponseWriter, r *http.Request) (string, error) {
 	r.Body = http.MaxBytesReader(w, r.Body, MaxBodyBytes)
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "could not read request body", http.StatusBadRequest)
-		return
+		return "", err
 	}
 
 	if len(body) == 0 {
-		http.Error(w, "empty body", http.StatusBadRequest)
+		return "", ErrEmptyBody
+	}
+
+	return string(body), nil
+}
+
+func (a *api) handlePost(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	body, err := readBody(w, r)
+	if err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	err = a.buff.Push(Message{Body: string(body)})
+	err = a.buff.Push(Message{Body: body})
 	if err != nil {
 		if errors.Is(err, ErrFull) {
 			http.Error(w, err.Error(), http.StatusTooManyRequests)
@@ -132,13 +148,9 @@ func main() {
 
 	a := &api{buff: buff}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /message", a.handlePost)
-	mux.HandleFunc("GET /message", a.handleGet)
-
 	srv := &http.Server{
 		Addr:         Address,
-		Handler:      mux,
+		Handler:      a.routes(),
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 5 * time.Second,
 	}

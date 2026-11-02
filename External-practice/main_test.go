@@ -250,3 +250,57 @@ func TestMemoryBuffer_ConcurrentPushPop(t *testing.T) {
 	_, err := buff.Pop()
 	assert.ErrorIs(t, err, ErrEmpty)
 }
+
+func TestReadBody_EmptyReturnsSentinel(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/message", strings.NewReader(""))
+	rec := httptest.NewRecorder()
+
+	_, err := readBody(rec, req)
+
+	assert.ErrorIs(t, err, ErrEmptyBody)
+}
+
+func TestReadBody_OK(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/message", strings.NewReader("payload"))
+	rec := httptest.NewRecorder()
+
+	body, err := readBody(rec, req)
+
+	require.NoError(t, err)
+	assert.Equal(t, "payload", body)
+}
+
+func TestRoutes_PostThenGet(t *testing.T) {
+	a := &api{buff: NewMemoryBuffer(MaxQueueSize)}
+	srv := httptest.NewServer(a.routes())
+	defer srv.Close()
+
+	postResp, err := http.Post(srv.URL+"/message", "text/plain", strings.NewReader("routed"))
+	require.NoError(t, err)
+	defer postResp.Body.Close()
+	assert.Equal(t, http.StatusCreated, postResp.StatusCode)
+
+	getResp, err := http.Get(srv.URL + "/message")
+	require.NoError(t, err)
+	defer getResp.Body.Close()
+	assert.Equal(t, http.StatusOK, getResp.StatusCode)
+
+	body, err := io.ReadAll(getResp.Body)
+	require.NoError(t, err)
+	assert.Equal(t, "routed", string(body))
+}
+
+func TestRoutes_MethodNotAllowed(t *testing.T) {
+	a := &api{buff: NewMemoryBuffer(MaxQueueSize)}
+	srv := httptest.NewServer(a.routes())
+	defer srv.Close()
+
+	req, err := http.NewRequest(http.MethodDelete, srv.URL+"/message", nil)
+	require.NoError(t, err)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode)
+}
