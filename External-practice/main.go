@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"sync"
 	"time"
 )
 
@@ -31,43 +30,31 @@ type MessageBuffer interface {
 }
 
 type memoryBuffer struct {
-	mu       sync.Mutex
-	messages []Message
-	maxSize  int
+	messages chan Message
 }
 
 func NewMemoryBuffer(maxSize int) *memoryBuffer {
 	return &memoryBuffer{
-		messages: make([]Message, 0, maxSize),
-		maxSize:  maxSize,
+		messages: make(chan Message, maxSize),
 	}
 }
 
 func (mb *memoryBuffer) Push(msg Message) error {
-	mb.mu.Lock()
-	defer mb.mu.Unlock()
-
-	if len(mb.messages) >= mb.maxSize {
+	select {
+	case mb.messages <- msg:
+		return nil
+	default:
 		return ErrFull
 	}
-
-	mb.messages = append(mb.messages, msg)
-
-	return nil
 }
 
 func (mb *memoryBuffer) Pop() (Message, error) {
-	mb.mu.Lock()
-	defer mb.mu.Unlock()
-
-	if len(mb.messages) == 0 {
+	select {
+	case msg := <-mb.messages:
+		return msg, nil
+	default:
 		return Message{}, ErrEmpty
 	}
-
-	msg := mb.messages[0]
-	mb.messages = mb.messages[1:]
-
-	return msg, nil
 }
 
 func OpenMessageBuffer(maxSize int) (MessageBuffer, error) {
