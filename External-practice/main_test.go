@@ -64,7 +64,7 @@ func TestMemoryBuffer_PopFreesCapacity(t *testing.T) {
 }
 
 func TestHandlePost_Created(t *testing.T) {
-	a := &api{addr: Address, buff: NewMemoryBuffer(MaxQueueSize)}
+	a := &api{buff: NewMemoryBuffer(MaxQueueSize)}
 
 	req := httptest.NewRequest(http.MethodPost, "/message", strings.NewReader("hello"))
 	rec := httptest.NewRecorder()
@@ -79,7 +79,7 @@ func TestHandlePost_Created(t *testing.T) {
 }
 
 func TestHandlePost_EmptyBody(t *testing.T) {
-	a := &api{addr: Address, buff: NewMemoryBuffer(MaxQueueSize)}
+	a := &api{buff: NewMemoryBuffer(MaxQueueSize)}
 
 	req := httptest.NewRequest(http.MethodPost, "/message", strings.NewReader(""))
 	rec := httptest.NewRecorder()
@@ -93,7 +93,7 @@ func TestHandlePost_Full(t *testing.T) {
 	buff := NewMemoryBuffer(1)
 	require.NoError(t, buff.Push(Message{Body: "Busy"}))
 
-	a := &api{addr: Address, buff: buff}
+	a := &api{buff: buff}
 
 	req := httptest.NewRequest(http.MethodPost, "/message", strings.NewReader("overflow"))
 	rec := httptest.NewRecorder()
@@ -104,7 +104,7 @@ func TestHandlePost_Full(t *testing.T) {
 }
 
 func TestHandlePost_InternalError(t *testing.T) {
-	a := &api{addr: Address, buff: &MessageBufferMock{
+	a := &api{buff: &MessageBufferMock{
 		PushFunc: func(msg Message) error {
 			return fmt.Errorf("unexpected failure")
 		},
@@ -122,7 +122,7 @@ func TestHandleGet_OK(t *testing.T) {
 	buff := NewMemoryBuffer(MaxQueueSize)
 	require.NoError(t, buff.Push(Message{Body: "payload"}))
 
-	a := &api{addr: Address, buff: buff}
+	a := &api{buff: buff}
 
 	req := httptest.NewRequest(http.MethodGet, "/message", nil)
 	rec := httptest.NewRecorder()
@@ -137,7 +137,7 @@ func TestHandleGet_OK(t *testing.T) {
 }
 
 func TestHandleGet_NotFound(t *testing.T) {
-	a := &api{addr: Address, buff: NewMemoryBuffer(MaxQueueSize)}
+	a := &api{buff: NewMemoryBuffer(MaxQueueSize)}
 
 	req := httptest.NewRequest(http.MethodGet, "/message", nil)
 	rec := httptest.NewRecorder()
@@ -148,7 +148,7 @@ func TestHandleGet_NotFound(t *testing.T) {
 }
 
 func TestHandleGet_InternalError(t *testing.T) {
-	a := &api{addr: Address, buff: &MessageBufferMock{
+	a := &api{buff: &MessageBufferMock{
 		PopFunc: func() (Message, error) {
 			return Message{}, fmt.Errorf("unexpected failure")
 		},

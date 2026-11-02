@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 const (
 	Address      = "localhost:8080"
 	MaxQueueSize = 10
+	MaxBodyBytes = 1 << 20
 )
 
 type Message struct {
@@ -58,20 +60,25 @@ func (mb *memoryBuffer) Pop() (Message, error) {
 }
 
 func OpenMessageBuffer(maxSize int) (MessageBuffer, error) {
+	if maxSize <= 0 {
+		return nil, fmt.Errorf("maxSize must be greater than zero, got %d", maxSize)
+	}
+
 	return NewMemoryBuffer(maxSize), nil
 }
 
 type api struct {
-	addr string
 	buff MessageBuffer
 }
 
 func (a *api) handlePost(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
+	r.Body = http.MaxBytesReader(w, r.Body, MaxBodyBytes)
+
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "could not read request body", http.StatusBadRequest)
 		return
 	}
 
@@ -87,7 +94,8 @@ func (a *api) handlePost(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("failed to push message", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
@@ -102,7 +110,8 @@ func (a *api) handleGet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("failed to pop message", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
@@ -121,14 +130,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	a := &api{addr: Address, buff: buff}
+	a := &api{buff: buff}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /message", a.handlePost)
 	mux.HandleFunc("GET /message", a.handleGet)
 
 	srv := &http.Server{
-		Addr:         a.addr,
+		Addr:         Address,
 		Handler:      mux,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 5 * time.Second,
