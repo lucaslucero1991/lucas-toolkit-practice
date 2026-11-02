@@ -15,16 +15,22 @@ go-diagrams/
 
 # Test binary, built with `go test -c`
 *.test
+*.prof
 
-# Output of the go coverage tool, specifically when used with LiteIDE
+# Output of the go coverage tool
 *.out
+*.log
+*.cache
+cover.out
 
 # Dependency directories (remove the comment below to include it)
 vendor/
 
 # IDE
 .vscode
+.vscode/
 .idea
+.idea/
 __Debug*
 __debug*
 

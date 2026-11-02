@@ -1,0 +1,108 @@
+package main
+
+import (
+	"testing"
+)
+
+func TestAddTruck(t *testing.T) {
+	manager := NewTruckManager()
+	err := manager.AddTruck("1", 100)
+	if err != nil {
+		t.Errorf("AddTruck failed: %v", err)
+	}
+
+	if len(manager.trucks) != 1 {
+		t.Errorf("Expected 1 truck, got %d", len(manager.trucks))
+	}
+}
+
+func TestGetTruck(t *testing.T) {
+	manager := NewTruckManager()
+	err := manager.AddTruck("1", 100)
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	truck, err := manager.GetTruck("1")
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	if truck.ID != "1" {
+		t.Errorf("Expected truck ID to be 1, got %s", truck.ID)
+	}
+}
+
+func TestRemoveTruck(t *testing.T) {
+	manager := NewTruckManager()
+	err := manager.AddTruck("1", 100)
+	if err != nil {
+		t.Errorf("Expected no error, got %s", err)
+	}
+
+	err = manager.RemoveTruck("1")
+	if err != nil {
+		t.Errorf("Expected no error, got %s", err)
+	}
+
+	_, err = manager.GetTruck("1")
+	if err != ErrTruckNotFound {
+		t.Errorf("Expected truck not found error, got %v", err)
+	}
+
+	if len(manager.trucks) != 0 {
+		t.Errorf("Expected 0 trucks, got %d", len(manager.trucks))
+	}
+}
+
+func TestUpdateTruckCargo(t *testing.T) {
+	manager := NewTruckManager()
+	err := manager.AddTruck("1", 100)
+	if err != nil {
+		t.Errorf("Expected no error, got %s", err)
+	}
+
+	err = manager.UpdateTruckCargo("1", 200)
+	if err != nil {
+		t.Errorf("Expected no error, got %s", err)
+	}
+
+	truck, err := manager.GetTruck("1")
+	if err != nil {
+		t.Errorf("Expected no error, got %s", err)
+	}
+
+	if truck.Cargo != 200 {
+		t.Errorf("Expected truck cargo to be 200, got %d", truck.Cargo)
+	}
+}
+
+func TestConcurrentUpdate(t *testing.T) {
+	manager := NewTruckManager()
+	err := manager.AddTruck("1", 100)
+	if err != nil {
+		t.Errorf("Expected no error, got %s", err)
+	}
+
+	const numGoroutines = 100
+	const iterations = 100
+	done := make(chan bool)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func() {
+			for j := 0; j < iterations; j++ {
+				truck, _ := manager.GetTruck("1")
+				err = manager.UpdateTruckCargo("1", truck.Cargo+1)
+				if err != nil {
+					t.Errorf("Expected no error, got %s", err)
+				}
+			}
+			done <- true
+		}()
+	}
+
+	// Wait for all goroutines to complete
+	for i := 0; i < numGoroutines; i++ {
+		<-done
+	}
+}

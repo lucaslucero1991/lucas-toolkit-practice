@@ -1,6 +1,6 @@
-module github.com/PatchSimple/pair-interviews/webserver_message_buffer/problem
+module lucas-toolkit-practice
 
-go 1.22.3
+go 1.24.3
 
 require github.com/stretchr/testify v1.11.1
 
