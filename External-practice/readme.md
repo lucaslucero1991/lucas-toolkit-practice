@@ -22,6 +22,17 @@ The server should listen on a hardcoded address and have a hardcoded max queue s
 
 There are implementation decisions that are intentionally abiguous. Please make your own assumption and come prepared to talk about the assumptions made.
 
+## My Assumptions
+
+Since the problem is intentionally ambiguous, here are the key decisions I made. Full rationale and trade-offs in [`ASSUMPTIONS.md`](./ASSUMPTIONS.md).
+
+- **Plain-text body, not JSON** — the smoke-test posts `-d 'hello'` and expects the raw message back.
+- **FIFO queue backed by a buffered channel** — a bounded, thread-safe FIFO by design, so no mutex.
+- **Non-blocking Push/Pop** — empty GET returns `404` and full POST returns `429` immediately, no long-polling.
+- **Error-to-status mapping** — `ErrEmpty` → `404`, `ErrFull` → `429`, empty body → `400`, anything else → `500` (real cause logged, not leaked).
+- **GET pops the message** (true queue semantics); request body capped at 1 MiB.
+- **Out of scope by choice** — auth, TLS, graceful shutdown, persistence; production concerns beyond an in-memory broker.
+
 ## What's Provided
 
 `main.go` ships with scaffolding so you can focus on the interesting parts:

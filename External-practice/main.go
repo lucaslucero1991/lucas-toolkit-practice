@@ -36,12 +36,6 @@ type memoryBuffer struct {
 	messages chan Message
 }
 
-func NewMemoryBuffer(maxSize int) *memoryBuffer {
-	return &memoryBuffer{
-		messages: make(chan Message, maxSize),
-	}
-}
-
 func (mb *memoryBuffer) Push(msg Message) error {
 	select {
 	case mb.messages <- msg:
@@ -60,23 +54,8 @@ func (mb *memoryBuffer) Pop() (Message, error) {
 	}
 }
 
-func OpenMessageBuffer(maxSize int) (MessageBuffer, error) {
-	if maxSize <= 0 {
-		return nil, fmt.Errorf("maxSize must be greater than zero, got %d", maxSize)
-	}
-
-	return NewMemoryBuffer(maxSize), nil
-}
-
 type api struct {
 	buff MessageBuffer
-}
-
-func (a *api) routes() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /message", a.handlePost)
-	mux.HandleFunc("GET /message", a.handleGet)
-	return mux
 }
 
 func (a *api) handlePost(w http.ResponseWriter, r *http.Request) {
@@ -160,4 +139,25 @@ func main() {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+func OpenMessageBuffer(maxSize int) (MessageBuffer, error) {
+	if maxSize <= 0 {
+		return nil, fmt.Errorf("maxSize must be greater than zero, got %d", maxSize)
+	}
+
+	return NewMemoryBuffer(maxSize), nil
+}
+
+func NewMemoryBuffer(maxSize int) *memoryBuffer {
+	return &memoryBuffer{
+		messages: make(chan Message, maxSize),
+	}
+}
+
+func (a *api) routes() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /message", a.handlePost)
+	mux.HandleFunc("GET /message", a.handleGet)
+	return mux
 }
