@@ -1,28 +1,28 @@
 # Lucas Toolkit Practice
 
-Repositorio personal para practicar y consolidar conocimientos en programación, con enfoque en Go. Los ejemplos están organizados por tema en carpetas para reforzar conceptos clave a través de la práctica.
+Personal repository for practicing and consolidating programming knowledge, with a focus on Go. The examples are organized by topic into folders to reinforce key concepts through practice.
 
-## Estructura del repositorio
+## Repository structure
 
 ### 3.CoreConcepts
-Fundamentos del lenguaje Go, cada carpeta cubre un concepto:
+Go language fundamentals, each folder covers one concept:
 
-- `1.Errors` — manejo de errores
+- `1.Errors` — error handling
 - `2.Interfaces` — interfaces
 - `3.Tests` — testing
-- `4.Pointers` — punteros
-- `5.Goroutines` — concurrencia con goroutines
-- `6.Context` — paquete context
-- `7.Channels` — channels (incluye buffer y worker pool pattern)
+- `4.Pointers` — pointers
+- `5.Goroutines` — concurrency with goroutines
+- `6.Context` — context package
+- `7.Channels` — channels (includes buffer and worker pool pattern)
 - `8.Maps` — maps
-- `9.Exercise` — ejercicios integradores
+- `9.Exercise` — integrative exercises
 
 ### 4.TCP-to-HTTP
-De TCP a un servidor HTTP en Go: un recorrido desde primeros principios sobre lo que ocurre por debajo del paquete `net/http`.
+From TCP to an HTTP server in Go: a first-principles walkthrough of what happens under the hood of the `net/http` package.
 
-- `encoding` — serialización / deserialización
-- `http` — servidor HTTP
-- `tcp` — fundamentos de TCP (servidor y cliente)
-- `main.go`, `main_test.go`, `moq_test.go` — ejemplo con tests y mocks
+- `encoding` — serialization / deserialization
+- `http` — HTTP server
+- `tcp` — TCP fundamentals (server and client)
+- `main.go`, `main_test.go`, `moq_test.go` — example with tests and mocks
 
-Consulta `4.TCP-to-HTTP/README.md` para el detalle de este módulo.
+See `4.TCP-to-HTTP/README.md` for the details of this module.
