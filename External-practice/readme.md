@@ -31,7 +31,8 @@ Since the problem is intentionally ambiguous, here are the key decisions I made.
 - **Non-blocking Push/Pop** — empty GET returns `404` and full POST returns `429` immediately, no long-polling.
 - **Error-to-status mapping** — `ErrEmpty` → `404`, `ErrFull` → `429`, empty body → `400`, anything else → `500` (real cause logged, not leaked).
 - **GET pops the message** (true queue semantics); request body capped at 1 MiB.
-- **Out of scope by choice** — auth, TLS, graceful shutdown, persistence; production concerns beyond an in-memory broker.
+- **Persistence is pluggable** — the `MessageBuffer` interface has two implementations: an in-memory buffer and a crash-safe file-backed buffer (see [Implementations](#implementations) below).
+- **Out of scope by choice** — auth, TLS; production concerns beyond this broker exercise.
 
 ## What's Provided
 
@@ -79,3 +80,101 @@ Be prepared to:
 - Be ready to extend your implementation with us. We may ask you to add behavior, handle a new edge case, or refactor part of the design.
 
 We care more about **how** you think and code than about whether you finished every extension. Show us your process.
+
+---
+
+## Implementations
+
+Both satisfy the same `MessageBuffer` interface (`Push`, `Pop`), so the HTTP layer never changes. Only the backing store differs.
+
+### `memoryBuffer` — in-memory, buffered channel
+
+- A bounded FIFO backed by `chan Message`. Thread-safe by construction, no mutex.
+- Fastest option, zero dependencies, nothing touches disk.
+- **Does not survive the process ending.** When the server stops, the queue is gone — this is the right default for an ephemeral broker.
+- Constructed via `NewMemoryBuffer(maxSize)`.
+
+### `fileBuffer` — crash-safe, write-ahead log (WAL)
+
+The implementation wired into `main` (`OpenMessageBuffer` → `NewFileBuffer`). It keeps the queue in memory **and** mirrors every change to an append-only log file (`queue.log`) so the queue survives a restart — **including a hard crash or `kill -9`**.
+
+How it works:
+
+- **Every `Push` and `Pop` is written to the log and `fsync`ed to disk _before_ the operation is acknowledged.** So once a POST returns `201`, that message is durable; once a GET returns `200`, that pop is durable. No in-memory-only window.
+- Each line is a JSON record: `{"op":"push","body":"..."}` or `{"op":"pop"}`.
+- On startup, the log is **replayed** to rebuild the exact queue state, then **compacted** (rewritten to only the live messages via a temp file + atomic rename) so it can't grow forever.
+- A **torn tail** — a half-written final record left by a crash mid-write — is detected and ignored on replay, rather than corrupting startup.
+- A failed write is **rolled back** (`Truncate`) so a partial record is never left behind at runtime.
+
+Trade-off: an `fsync` per request is a disk round-trip, so this is slower than the in-memory buffer. That latency is the price of surviving a crash. For a high-throughput broker you'd batch/group-commit syncs or move to an external durable store.
+
+### Why not Redis / an external queue?
+
+An external store (Redis, SQS, RabbitMQ) is the other way to survive a restart, and it also lets multiple server instances share one queue — something neither in-process option can do. It was ruled out here because it adds a second process and a third-party client, which crosses this exercise's "standard library only" line. The `fileBuffer` gives crash durability while staying 100% stdlib and single-process.
+
+### What survives what
+
+| Scenario                               | `memoryBuffer` | `fileBuffer` (WAL) |
+|----------------------------------------|:--------------:|:------------------:|
+| Normal operation                       | ✅             | ✅                 |
+| Graceful shutdown (Ctrl+C / SIGTERM)   | ❌             | ✅                 |
+| Hard crash / `kill -9` / power loss    | ❌             | ✅                 |
+| Share one queue across instances       | ❌             | ❌ (needs external store) |
+
+---
+
+## Testing
+
+### Automated
+
+```bash
+go test -race ./...
+```
+
+Covers both implementations: FIFO ordering, `ErrEmpty`/`ErrFull` mapping, capacity, handler status codes, routing, and concurrency under the race detector. The `fileBuffer` adds crash-recovery tests: messages survive a reload without `Close`, popped messages do **not** reappear, a torn tail is ignored, the log compacts on startup, and a rejected (full) push is never persisted.
+
+### Manual — prove crash durability with curl
+
+This is the scenario to demo. It shows new messages surviving a `kill -9` and already-consumed messages *not* coming back.
+
+```bash
+# Terminal 1 — start the server (uses the fileBuffer)
+go run main.go
+```
+
+```bash
+# Terminal 2
+U=http://localhost:8080/message
+
+curl -i -X POST -d 'alpha' $U     # 201
+curl -i -X POST -d 'beta'  $U     # 201
+curl -i -X POST -d 'gamma' $U     # 201
+curl -i -X POST -d 'delta' $U     # 429 (full, MaxQueueSize=3)
+
+curl -s $U                        # alpha  (FIFO)
+curl -s $U                        # beta
+curl -s $U                        # gamma
+
+curl -i -X POST -d 'lucas'   $U   # 201
+curl -i -X POST -d 'lucas_2' $U   # 201
+
+# Simulate a hard crash — NO graceful shutdown, nothing gets a chance to flush
+kill -9 $(lsof -ti :8080)
+
+# Inspect the durable log: 3 pushes, 3 pops, 2 pushes
+cat queue.log
+```
+
+```bash
+# Terminal 1 — restart
+go run main.go
+```
+
+```bash
+# Terminal 2 — the queue came back from disk
+curl -s $U                        # lucas    (survived the kill -9)
+curl -s $U                        # lucas_2
+curl -i $U                        # 404 empty (alpha/beta/gamma did NOT reappear — their pops were durable)
+```
+
+Note: `queue.log` is the on-disk state. Delete it (`rm -f queue.log`) to start from an empty queue. It's git-ignored (`*.log`).
