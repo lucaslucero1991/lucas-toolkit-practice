@@ -18,7 +18,7 @@ import (
 
 const (
 	Address      = "localhost:8080"
-	MaxQueueSize = 3
+	MaxQueueSize = 10
 	MaxBodyBytes = 1 << 20
 	QueuePath    = "queue.log"
 )

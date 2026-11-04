@@ -146,22 +146,21 @@ go run main.go
 # Terminal 2
 U=http://localhost:8080/message
 
-curl -i -X POST -d 'alpha' $U     # 201
-curl -i -X POST -d 'beta'  $U     # 201
-curl -i -X POST -d 'gamma' $U     # 201
-curl -i -X POST -d 'delta' $U     # 429 (full, MaxQueueSize=3)
+# Fill the queue (MaxQueueSize=10), then one more POST overflows
+for i in $(seq 1 10); do curl -s -o /dev/null -X POST -d "msg-$i" $U; done
+curl -i -X POST -d 'overflow' $U  # 429 (full)
 
-curl -s $U                        # alpha  (FIFO)
-curl -s $U                        # beta
-curl -s $U                        # gamma
+# Drain it all back out (FIFO: msg-1 first)
+for i in $(seq 1 10); do curl -s $U; echo; done
 
+# Now add two fresh messages
 curl -i -X POST -d 'lucas'   $U   # 201
 curl -i -X POST -d 'lucas_2' $U   # 201
 
 # Simulate a hard crash — NO graceful shutdown, nothing gets a chance to flush
 kill -9 $(lsof -ti :8080)
 
-# Inspect the durable log: 3 pushes, 3 pops, 2 pushes
+# Inspect the durable log: 10 pushes, 10 pops, 2 pushes
 cat queue.log
 ```
 
